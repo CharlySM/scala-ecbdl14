@@ -73,6 +73,8 @@ object Processing extends App {
 
   val dfStart = spark.sqlContext.read.parquet("hdfs://atlas:9000/user/carsan/proteinasNormalized.parquet").cache()
 
+  //val dfStart = spark.sqlContext.read.parquet("./src/main/resources/proteinasNormalized.parquet").limit(1000).cache()
+
   val dfBalanced=balancedDF(dfStart)
 
   val columns=dfBalanced.columns.filter(_!="class")
@@ -96,12 +98,9 @@ object Processing extends App {
       .otherwise(col(c + ".min"))).withField("weight", getRandomNumber(col(c + ".min"), col(c + ".max")))
     .withField("res", col(c + ".weight") * col(c + ".value")))).toMap
 
-
   val listF1=immutable.Seq.range(0,1).map(i=>f1()(_))
   val chained=chain(listF1)
   val dfWeightsCalculated=dfPrepared.transform(chained).cache()
-
-  //println(dfCalculated.count())
 
   val listCols=columns.map(c=>struct(col(s"${c}.weight"), col(s"${c}.value")).alias(c) )
 
@@ -112,30 +111,21 @@ object Processing extends App {
   val prods=dfSumaFinal.select(listProds:_*)
   val row=prods.first()
   val mapsRow=row.getValuesMap[Double](row.schema.fieldNames)
-  val selectColumns=mapsRow.toSeq.sortWith(_._2 > _._2).map(i=>(s"`${i._1}`.value as `${i._1.replace("_sum", "")}`", i._2)).toMap.take(300)
- // println(selectColumns.size)
+  val selectColumns=mapsRow.toSeq.sortWith(_._2 > _._2).toMap.take(300)
+
   val colM: Column =columns.map(i=>col(i+".weight")).reduce((x, y) => x+y)
 
   val dfProd=dfSumaFinal.withColumn("valueRow", colM)
-  //val min_max = dfProd.agg(min("valueRow"), avg("valueRow")).head()
-  // min_max: org.apache.spark.sql.Row = [1,5]
 
-  //val col_min = min_max.getFloat(0)
-  // col_min: Int = 1
+
+
   val min_value = dfProd.select(min(col("valueRow")).alias("MIN")).first().getFloat(0)
   val avg_value = dfProd.select(avg(col("valueRow")).alias("MAX")).first().getDouble(0)
-  //val col_avg = min_max.getFloat(1)
-  //val minT=dfProd.selectExpr("min(`valueRow`) as MIN").head.getFloat(0)
-  //val avg=dfProd.selectExpr("avg(`valueRow`) as AVG").head.getFloat(0)
 
-  val columnsSelected=selectColumns.keys.toList//.map(i=>s"${i._1}.value as ${i._1}")//.toList
-  // println(selectColumns)
- // println(min_value, max_value)
+  val columnsSelected=selectColumns.map(i=>s"`${i._1.replace("_sum", "")}`.value as `${i._1.replace("_sum", "")}`").toList
 
   val dfFinal=dfProd.filter(col("valueRow")>=lit(avg_value-min_value))
   .selectExpr(columnsSelected:_*)
 
-  dfFinal.printSchema()
-  println(dfFinal.count())
 
 }

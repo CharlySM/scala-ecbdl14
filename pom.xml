@@ -43,12 +43,12 @@
       <version>3.0.5</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
+  <!--  <dependency>
       <groupId>org.specs2</groupId>
       <artifactId>specs2-core_${scala.compat.version}</artifactId>
       <version>${spec2.version}</version>
       <scope>test</scope>
-    </dependency>
+    </dependency>-->
     <dependency>
       <groupId>org.specs2</groupId>
       <artifactId>specs2-junit_${scala.compat.version}</artifactId>
