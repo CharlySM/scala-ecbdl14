@@ -3,7 +3,7 @@ package org.apache.spark
 import YamlConfig.LoadYaml.parseYaml
 import org.apache.spark.Main.args
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{Column, DataFrame, SparkSession, functions}
+import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession, functions}
 
 import scala.Function.chain
 import scala.collection.immutable
@@ -88,7 +88,7 @@ object Processing extends App {
 
   val maxim=dfCalculated.filter("total>0").select(max(col("sumTotal")).alias("MAX")).first().getDouble(0).toFloat
 
-  val corte: Float=maxim/columns.size.toFloat
+  val corte: Float=maxim/columns.length.toFloat
 
   val dictCols=columns.map(i=>(i, col(i).withField("max", lit(1)).withField("min", lit(0)))).toMap
   val dfPrepared=dfCalculated.withColumns(dictCols)
@@ -98,7 +98,7 @@ object Processing extends App {
       .otherwise(col(c + ".min"))).withField("weight", getRandomNumber(col(c + ".min"), col(c + ".max")))
     .withField("res", col(c + ".weight") * col(c + ".value")))).toMap
 
-  val listF1=immutable.Seq.range(0,1).map(i=>f1()(_))
+  val listF1=immutable.Seq.range(0,3000).map(i=>f1()(_))
   val chained=chain(listF1)
   val dfWeightsCalculated=dfPrepared.transform(chained).cache()
 
@@ -111,13 +111,11 @@ object Processing extends App {
   val prods=dfSumaFinal.select(listProds:_*)
   val row=prods.first()
   val mapsRow=row.getValuesMap[Double](row.schema.fieldNames)
-  val selectColumns=mapsRow.toSeq.sortWith(_._2 > _._2).toMap.take(300)
+  val selectColumns=mapsRow.toSeq.sortWith(_._2 > _._2).toMap.take(100)
 
   val colM: Column =columns.map(i=>col(i+".weight")).reduce((x, y) => x+y)
 
   val dfProd=dfSumaFinal.withColumn("valueRow", colM)
-
-
 
   val min_value = dfProd.select(min(col("valueRow")).alias("MIN")).first().getFloat(0)
   val avg_value = dfProd.select(avg(col("valueRow")).alias("MAX")).first().getDouble(0)
@@ -126,6 +124,8 @@ object Processing extends App {
 
   val dfFinal=dfProd.filter(col("valueRow")>=lit(avg_value-min_value))
   .selectExpr(columnsSelected:_*)
+
+  dfFinal.write.mode(SaveMode.Overwrite).parquet("hdfs://atlas:9000/user/carsan/processingDataPersonalized.parquet")
 
 
 }
