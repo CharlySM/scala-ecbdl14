@@ -1,5 +1,7 @@
 package org.apache
 
+import YamlConfig.LoadYaml.parseYaml
+import org.apache.spark.Main.args
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.classification.RandomForestClassifier
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
@@ -16,12 +18,14 @@ object RandomForest extends App{
     //.master("local[*]")
     .getOrCreate()
 
+  val configs=parseYaml(args(0))
+
   val sc: SparkContext = spark.sparkContext
   sc.setLogLevel("ERROR")
 
   spark.conf.set("spark.sql.adaptive.enabled", "true")
 
-  val dfStart = spark.sqlContext.read.parquet("hdfs://atlas:9000/user/carsan/processingDataPersonalized.parquet")
+  val dfStart = spark.sqlContext.read.parquet(configs("dataset").toString)
 
 
   val cols=dfStart.columns.filter(_!="class")
