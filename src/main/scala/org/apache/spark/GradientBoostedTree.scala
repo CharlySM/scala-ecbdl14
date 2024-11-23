@@ -22,8 +22,7 @@ object GradientBoostedTree extends App{
 
   spark.conf.set("spark.sql.adaptive.enabled", "true")
 
-  val dfStart = spark.sqlContext.read.parquet("hdfs://atlas:9000/user/carsan/proteinasNormalized.parquet")
-
+  val dfStart = spark.sqlContext.read.parquet("hdfs://atlas:9000/user/carsan/processingDataPersonalized.parquet")
 
   val cols=dfStart.columns.filter(_!="class")
   val mapCols=cols.map(i=> (i, col(i)+lit(10))).toMap
