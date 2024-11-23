@@ -1,7 +1,6 @@
 package org.apache
 
 import YamlConfig.LoadYaml.parseYaml
-import org.apache.RandomForest.{args, predictionDf}
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.classification.GBTClassifier
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
@@ -14,11 +13,11 @@ object GradientBoostedTree extends App{
   val spark: SparkSession = SparkSession
     .builder()
     .appName(name = "Preprocessing")
-    .master(master = "spark://atlas:7077")
-    //.master("local[*]")
+    //.master(master = "spark://atlas:7077")
+    .master("local[*]")
     .getOrCreate()
 
-  val configs=parseYaml(args(0))
+  //val configs=parseYaml(args(0))
 
 
   val sc: SparkContext = spark.sparkContext
@@ -26,7 +25,8 @@ object GradientBoostedTree extends App{
 
   spark.conf.set("spark.sql.adaptive.enabled", "true")
 
-  val dfStart = spark.sqlContext.read.parquet(configs("dataset").toString)
+  //val dfStart = spark.sqlContext.read.parquet(configs("dataset").toString)
+  val dfStart = spark.sqlContext.read.parquet("./src/main/resources/data/proteinasNormalized.parquet").limit(4000000).cache()
 
   val cols=dfStart.columns.filter(_!="class")
   val mapCols=cols.map(i=> (i, col(i)+lit(10))).toMap

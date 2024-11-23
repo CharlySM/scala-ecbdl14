@@ -71,10 +71,11 @@ object Processing extends App {
 
   spark.conf.set("spark.sql.adaptive.enabled", "true")
 
+  println("Reading data")
   val dfStart = spark.sqlContext.read.parquet("hdfs://atlas:9000/user/carsan/proteinasNormalized.parquet").cache()
 
   //val dfStart = spark.sqlContext.read.parquet("./src/main/resources/proteinasNormalized.parquet").limit(1000).cache()
-
+  println("Balancing data")
   val dfBalanced=balancedDF(dfStart)
 
   val columns=dfBalanced.columns.filter(_!="class")
@@ -92,7 +93,7 @@ object Processing extends App {
 
   val dictCols=columns.map(i=>(i, col(i).withField("max", lit(1)).withField("min", lit(0)))).toMap
   val dfPrepared=dfCalculated.withColumns(dictCols)
-
+  println("Evolutive  transformations")
   val dictUpdateWeights=columns.map(c=> (c, col(c).withField("max", when(col(c + ".res") > lit(corte), col(c + ".weight")).otherwise(
       col(c + ".max"))).withField("min", when(col(c + ".res") < lit(corte), col(c + ".weight"))
       .otherwise(col(c + ".min"))).withField("weight", getRandomNumber(col(c + ".min"), col(c + ".max")))
@@ -119,12 +120,12 @@ object Processing extends App {
 
   val min_value = dfProd.select(min(col("valueRow")).alias("MIN")).first().getFloat(0)
   val avg_value = dfProd.select(avg(col("valueRow")).alias("MAX")).first().getDouble(0)
-
+  println("Select columns and instances")
   val columnsSelected=selectColumns.map(i=>s"`${i._1.replace("_sum", "")}`.value as `${i._1.replace("_sum", "")}`").toList
 
   val dfFinal=dfProd.filter(col("valueRow")>=lit(avg_value-min_value))
   .selectExpr(columnsSelected:_*)
-
+  println("Write data")
   dfFinal.write.mode(SaveMode.Overwrite).parquet("hdfs://atlas:9000/user/carsan/processingDataPersonalized.parquet")
 
 

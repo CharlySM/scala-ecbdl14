@@ -1,15 +1,23 @@
-package org.apache
+package org.apache.spark
 
 import YamlConfig.LoadYaml.parseYaml
-import org.apache.spark.Main.args
-import org.apache.spark.SparkContext
 import org.apache.spark.ml.classification.RandomForestClassifier
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
-import org.apache.spark.ml.feature.{IndexToString, VectorAssembler}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object RandomForest extends App{
+
+  def balancedDF(df:DataFrame): DataFrame = {
+    val dfP=df.filter("class=1")
+    val dfN=df.filter("class=0")
+    val nP=dfP.count()
+    val nN=dfN.count()
+    val ratio = nP/nN
+    val dfNSample=dfN.sample(false, ratio)
+    dfP.unionAll(dfNSample)
+  }
 
   val spark: SparkSession = SparkSession
     .builder()
@@ -25,38 +33,46 @@ object RandomForest extends App{
 
   spark.conf.set("spark.sql.adaptive.enabled", "true")
 
+  println("Reading data")
   val dfStart = spark.sqlContext.read.parquet(configs("dataset").toString)
+  //val dfStart = spark.sqlContext.read.parquet("./src/main/resources/data/treatedProteinasHME_BD.parquet").limit(400000).cache()
 
+  //val lisCols=dfStart.columns.map(i=> (i, col(i).cast("Double"))).toMap[String, Column]
+  //val dfRes=dfStart.withColumns(lisCols)
 
-  val cols=dfStart.columns.filter(_!="class")
+  val dfBalanced=balancedDF(dfStart)
+
+  val cols=dfBalanced.columns.filter(_!="class")
   val mapCols=cols.map(i=> (i, col(i)+lit(10))).toMap
-  val dfStartModified=dfStart.withColumns(mapCols)
+  val dfStartModified=dfBalanced.withColumns(mapCols)
 
   val dfFeatures=dfStartModified
     .withColumn("label", col("class"))
-
+  println("Prepare data")
   val assembler=new VectorAssembler()
     .setInputCols(cols)
     .setOutputCol("features")
 
   val featureDf = assembler.transform(dfFeatures)
 
-  val Array(trainingData, testData) = featureDf.randomSplit(Array(0.75, 0.25), seed = 23789L)
+  val Array(trainingData, testData) = featureDf.randomSplit(Array(0.8, 0.2), seed = 2457843L)
 
+  println("Building model")
   val model = new RandomForestClassifier()
     .setImpurity("gini")
-    .setMaxDepth(3)
-    .setNumTrees(20)
+    .setMaxDepth(5)
+    .setNumTrees(50)
     .setFeatureSubsetStrategy("auto")
     .setSeed(23789L)
     .fit(trainingData)
 
+  println("Prediting data")
   val predictionDf = model.transform(testData)
 
   val evaluator = new BinaryClassificationEvaluator()
     .setLabelCol("label")
     .setMetricName("areaUnderROC")
-
+  println("Evaluating data")
   val accuracy = evaluator.evaluate(predictionDf)
   println(accuracy)
 
