@@ -1,11 +1,10 @@
-package org.apache
+package org.apache.spark
 
 import YamlConfig.LoadYaml.parseYaml
-import org.apache.spark.SparkContext
 import org.apache.spark.ml.classification.GBTClassifier
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.functions.{col, lit}
 
 object GradientBoostedTree extends App{
@@ -13,11 +12,11 @@ object GradientBoostedTree extends App{
   val spark: SparkSession = SparkSession
     .builder()
     .appName(name = "Preprocessing")
-    //.master(master = "spark://atlas:7077")
-    .master("local[*]")
+    .master(master = "spark://atlas:7077")
+  //.master("local[*]")
     .getOrCreate()
 
-  //val configs=parseYaml(args(0))
+  val configs=parseYaml(args(0))
 
 
   val sc: SparkContext = spark.sparkContext
@@ -26,7 +25,17 @@ object GradientBoostedTree extends App{
   spark.conf.set("spark.sql.adaptive.enabled", "true")
 
   //val dfStart = spark.sqlContext.read.parquet(configs("dataset").toString)
-  val dfStart = spark.sqlContext.read.parquet("./src/main/resources/data/proteinasNormalized.parquet").limit(4000000).cache()
+  //val dfStart = spark.sqlContext.read.parquet("./src/main/resources/data/proteinasNormalized.parquet").limit(4000000).cache()
+
+  val dfStart=if(args(1)=="1") {
+    val dfAux=spark.sqlContext.read.parquet(configs("dataset").toString)
+    val lisCols = dfAux.columns.map(i => (i, col(i).cast("Double"))).toMap[String, Column]
+    dfAux.withColumns(lisCols)
+
+    //balancedDF(dfRes)
+  }
+  else spark.sqlContext.read.parquet(configs("dataset").toString)
+  println(dfStart.count())
 
   val cols=dfStart.columns.filter(_!="class")
   val mapCols=cols.map(i=> (i, col(i)+lit(10))).toMap

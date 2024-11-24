@@ -5,7 +5,7 @@ import org.apache.spark.ml.classification.RandomForestClassifier
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
 object RandomForest extends App{
 
@@ -34,17 +34,21 @@ object RandomForest extends App{
   spark.conf.set("spark.sql.adaptive.enabled", "true")
 
   println("Reading data")
-  val dfStart = spark.sqlContext.read.parquet(configs("dataset").toString)
-  //val dfStart = spark.sqlContext.read.parquet("./src/main/resources/data/treatedProteinasHME_BD.parquet").limit(400000).cache()
+  //val dfStart = spark.sqlContext.read.parquet(configs("dataset").toString)
+ // val dfStart = spark.sqlContext.read.parquet("./src/main/resources/data/treatedProteinasHME_BD.parquet").limit(400000).cache()
 
-  //val lisCols=dfStart.columns.map(i=> (i, col(i).cast("Double"))).toMap[String, Column]
-  //val dfRes=dfStart.withColumns(lisCols)
+  val dfStart=if(args(1)=="1") {
+    val dfAux=spark.sqlContext.read.parquet(configs("dataset").toString)
+    val lisCols = dfAux.columns.map(i => (i, col(i).cast("Double"))).toMap[String, Column]
+    dfAux.withColumns(lisCols)
 
-  val dfBalanced=balancedDF(dfStart)
-
-  val cols=dfBalanced.columns.filter(_!="class")
+    //balancedDF(dfRes)
+  }
+  else spark.sqlContext.read.parquet(configs("dataset").toString)
+  println(dfStart.count())
+  val cols=dfStart.columns.filter(_!="class")
   val mapCols=cols.map(i=> (i, col(i)+lit(10))).toMap
-  val dfStartModified=dfBalanced.withColumns(mapCols)
+  val dfStartModified=dfStart.withColumns(mapCols)
 
   val dfFeatures=dfStartModified
     .withColumn("label", col("class"))
