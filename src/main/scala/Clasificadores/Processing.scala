@@ -1,7 +1,8 @@
-package org.apache.spark
+package Clasificadores
 
 import YamlConfig.LoadYaml.parseYaml
-import org.apache.spark.Main.args
+import Main.args
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession, functions}
 
@@ -61,6 +62,10 @@ object Processing extends App {
 
   val spark: SparkSession = SparkSession
     .builder()
+    .config("spark.driver.extraJavaOptions", "-Xss1024m")
+    .config("spark.executor.extraJavaOptions", "-Xss1024m")
+    .config("spark.memory.offHeap.enabled", true)
+    .config("spark.memory.offHeap.size", "9g")
     .appName(name = "Preprocessing")
     .master(master = "spark://atlas:7077")
     //.master("local[*]")
@@ -99,7 +104,7 @@ object Processing extends App {
       .otherwise(col(c + ".min"))).withField("weight", getRandomNumber(col(c + ".min"), col(c + ".max")))
     .withField("res", col(c + ".weight") * col(c + ".value")))).toMap
 
-  val listF1=immutable.Seq.range(0,3000).map(i=>f1()(_))
+  val listF1=immutable.Seq.range(0,1000).map(i=>f1()(_))
   val chained=chain(listF1)
   val dfWeightsCalculated=dfPrepared.transform(chained).cache()
 

@@ -1,4 +1,4 @@
-package org.apache.spark
+package Clasificadores
 
 import YamlConfig.LoadYaml.parseYaml
 import org.apache.spark.SparkContext
