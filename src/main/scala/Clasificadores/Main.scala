@@ -6,8 +6,7 @@ import org.apache.spark.ml.classification.NaiveBayes
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{array, col, lit}
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.functions.{col, lit}
 
 /**
  * @author ${user.name}

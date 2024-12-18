@@ -23,8 +23,8 @@ object Multiperceptron extends App {
     .config("spark.memory.offHeap.enabled", value = true)
     .config("spark.memory.offHeap.size", "9g")
     .appName(name = "GradientBoost")
-    .master(master = "spark://atlas:7077")
-    //.master("local[*]")
+    //.master(master = "spark://atlas:7077")
+    .master("local[*]")
     .getOrCreate()
 
   val configs=parseYaml(args(0))
@@ -58,20 +58,9 @@ object Multiperceptron extends App {
     .map(r=>(r.getAs[Double]("prediction"), r.getAs[Double]("label")))
 
   val metrics = new MulticlassMetrics(predictionRDD)
-  val evaluator=new MulticlassClassificationEvaluator()
-  val metrics2=evaluator.getMetrics(predictionDf)//.//.evaluate(predictionDf)
-
-  val (fp2, tp2)=(metrics2.falsePositiveRate(1.0), metrics2.truePositiveRate(1.0))
-  val (fn2, tn2)=(1-fp2, 1-tp2)
-  val TPR2 = tp2/(tp2+fn2)
-  val TNR2 = tn2/(tn2+fp2)
-  val score2 = TPR2 * TNR2
-  val scores2 = (TPR2, TNR2, score2)
-
-  print(scores2)
-
-  val (fp, tp) = (metrics.falsePositiveRate(1.0), metrics.truePositiveRate(1.0))
-  val (fn, tn)=(1-fp, 1-tp)
+  val matrix=metrics.confusionMatrix
+  val (fp, tp) = (matrix.apply(0, 1), matrix.apply(1,1))
+  val (fn, tn)=(matrix.apply(1, 0), matrix.apply(0,0))
 
   val TPR = tp/(tp+fn)
   val TNR = tn/(tn+fp)

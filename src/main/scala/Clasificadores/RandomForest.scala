@@ -7,6 +7,7 @@ import org.apache.spark.ml.classification.RandomForestClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
@@ -32,8 +33,8 @@ object RandomForest extends App{
     .config("spark.memory.offHeap.enabled", true)
     .config("spark.memory.offHeap.size", "9g")
     .appName(name = "Random forest")
-    .master(master = "spark://atlas:7077")
-    //.master("local[*]")
+    //.master(master = "spark://atlas:7077")
+    .master("local[*]")
     .getOrCreate()
 
   val configs: Map[String, Any] =parseYaml(args(0))
@@ -58,14 +59,16 @@ object RandomForest extends App{
     .fit(featureDf)
 
   println("Prediting data")
-  val predictionDf = model.transform(dfTestFeatures).select("prediction", "label")//.rdd.map(r=>(r(0), r(1)))
-   val metrics = new MulticlassMetrics(predictionDf.rdd.map(r=>(r(0), r(1))))
+  val result = model.transform(dfTestFeatures).select("prediction", "label").rdd.map(r=>(r(0), r(1)))
+  println(result.first())
+  val metrics = new MulticlassMetrics(result)
 
-  val evaluator=new MulticlassClassificationEvaluator()
-  metrics.confusionMatrix.toArray
+  println(metrics.confusionMatrix.toArray.mkString("Array(", ", ", ")"))
+  println(metrics.confusionMatrix)
+  val matrix=metrics.confusionMatrix
 
-  val (fp, tp) = Tuple2(metrics.falsePositiveRate(1.0), metrics.truePositiveRate(1.0))
-  val (fn, tn)=(1-fp, 1-tp)
+  val (fp, tp) = (matrix.apply(0, 1), matrix.apply(1,1))
+  val (fn, tn)=(matrix.apply(1, 0), matrix.apply(0,0))
 
   val TPR = tp/(tp+fn)
   val TNR = tn/(tn+fp)

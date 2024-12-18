@@ -50,9 +50,10 @@ object GradientBoostedTree extends App{
     .map(r=>(r.getAs[Double]("prediction"), r.getAs[Double]("label")))
 
   val metrics = new MulticlassMetrics(predictionDf)
+  val matrix=metrics.confusionMatrix
 
-  val (fp, tp) = (metrics.falsePositiveRate(1.0), metrics.truePositiveRate(1.0))
-  val (fn, tn)=(1-fp, 1-tp)
+  val (fp, tp) = (matrix.apply(0, 1), matrix.apply(1,1))
+  val (fn, tn)=(matrix.apply(1, 0), matrix.apply(0,0))
 
   val TPR = tp/(tp+fn)
   val TNR = tn/(tn+fp)

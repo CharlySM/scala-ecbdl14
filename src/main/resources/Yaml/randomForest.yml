@@ -1,1 +1,10 @@
-dataset: hdfs://atlas:9000/user/carsan/processingDataPersonalized.parquet
+#dataset: C:\Users\iccit\Universidad\doctorado\competicion\resources\PCAK3.parquet
+#test: C:\Users\iccit\Universidad\doctorado\competicion\resources\PCAK3.parquet
+dataset: C:\Users\iccit\Universidad\doctorado\competicion\resources\proteinasNormalized.parquet
+test: C:\Users\iccit\Universidad\doctorado\competicion\resources\proteinasNormalized.parquet
+params:
+  maxDepth: 4
+  nTrees: 90
+  seed: 123456789
+  strategy: sqrt
+  impurity: gini
