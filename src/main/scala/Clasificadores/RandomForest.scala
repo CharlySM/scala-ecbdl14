@@ -13,18 +13,7 @@ import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
 object RandomForest extends App{
 
-  def balancedDF(df:DataFrame): DataFrame = {
-    val dfP=df.filter("class=1")
-    val dfN=df.filter("class=0")
-    val nP=dfP.count().toDouble
-    val nN=dfN.count().toDouble
-    val major= if(nP>nN) nP else nN
-    val minor=if(nP<nN) nP else nN
-    val dfMinor=if(nP<nN) dfP else dfN
-    val ratio = minor/major
-    val dfNSample=dfN.sample(withReplacement = true, ratio)
-    dfMinor.unionAll(dfNSample)
-  }
+
 
   implicit val spark: SparkSession = SparkSession
     .builder()

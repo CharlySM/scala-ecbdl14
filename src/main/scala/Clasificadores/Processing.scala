@@ -1,29 +1,17 @@
 package Clasificadores
 
+import Utils.Utils.random_undersampling
+import YamlConfig.LoadYaml.parseYaml
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession, functions}
 
 import scala.Function.chain
 import scala.collection.immutable
 
 
-
-
 object Processing extends App {
 
-  def balancedDF(df:DataFrame, col:String): DataFrame = {
-    val dfP=df.filter(s"$col=1")
-    val dfN=df.filter(s"$col=0")
-    val nP=dfP.count().toDouble
-    val nN=dfN.count().toDouble
-    val major= if(nP>nN) nP else nN
-    val minor=if(nP<nN) nP else nN
-    val dfMinor=if(nP<nN) dfP else dfN
-    val ratio = minor/major
-    val dfNSample=dfN.sample(withReplacement = true, ratio)
-    dfMinor.unionAll(dfNSample)
-  }
 
   def initializingWeight(df:DataFrame, columns:Array[String]): DataFrame = {
     val dictWeights=columns.map(i=> (i, struct(rand().alias("weight"), col(i).alias("value")))).toMap
@@ -43,32 +31,24 @@ object Processing extends App {
 
   }
 
-  def getRandom= (n: Float, m:Float) => {
-    val rand=scala.util.Random.nextFloat()
-    val max=m
-    val min=n
-    val range = max-min
-    val adjustment=range*rand
-    min+adjustment
-
-  }
-
   def f1()(df:DataFrame): DataFrame = {
     df.withColumns(dictUpdateWeights)
+    //dfres.select(columns.map(i=>col(s"$i.weight")):_*).show()
+    //dfres
+   // null
   }
 
   import org.apache.spark.sql.functions.udf
   //val getRandomNumber = udf(getRandom)
-
+  val configs=parseYaml(args(0))
   val spark: SparkSession = SparkSession
     .builder()
     .config("spark.driver.extraJavaOptions", "-Xss1024m")
     .config("spark.executor.extraJavaOptions", "-Xss1024m")
     .config("spark.memory.offHeap.enabled", true)
     .config("spark.memory.offHeap.size", "9g")
-    .appName(name = "Preprocessing")
-    .master(master = "spark://atlas:7077")
-    //.master("local[*]")
+    .appName(name = "Processing")
+    .master(master = configs("cluster").toString)
     .getOrCreate()
 
   val sc: SparkContext = spark.sparkContext
@@ -77,12 +57,14 @@ object Processing extends App {
   spark.conf.set("spark.sql.adaptive.enabled", "true")
 
   println("Reading data")
-  val dfStart = spark.sqlContext.read.parquet("hdfs://atlas:9000/user/carsan/proteinasNormalized.parquet").cache()
+
+  val dfStart = spark.sqlContext.read.parquet(configs("dataset").toString).cache()
+
  // println("dfStart show")
   //dfStart.filter("class=0").show()
   //val dfStart = spark.sqlContext.read.parquet("./src/main/resources/proteinasNormalized.parquet").limit(1000).cache()
   println("Balancing data")
-  val dfBalanced=balancedDF(dfStart, "class")
+  val dfBalanced=random_undersampling(dfStart, 1.0, "class")
 
   val columns=dfBalanced.columns.filter(_!="class")
   //println("dfBalanced show")
@@ -95,9 +77,22 @@ object Processing extends App {
   val dfCalculated=calculate(dfWeights, columns)
     .withColumn("total", col("sumTotal")*col("class"))
 
-  val maxim=dfCalculated.filter("total>0").select(max(col("sumTotal")).alias("MAX")).first().getDouble(0).toFloat
+  val maxim=dfCalculated.select(functions.max(col("sumTotal")).alias("MAX")).first().getDouble(0).toFloat
+  val minim=dfCalculated.select(min(col("sumTotal")).alias("MIN")).first().getDouble(0).toFloat
+  val mediana=dfCalculated.select(median(col("sumTotal")).alias("median")).first().getDouble(0).toFloat
+  val medmax=(maxim-mediana).abs
+  val medmin=(mediana-minim).abs
 
-  val corte: Float=maxim/columns.length.toFloat
+  val margen=(medmax-medmin)/2.0
+
+  val sup=mediana+margen
+  val inf=mediana-margen
+
+  //val max=mediana
+  //val corte=mediana/4
+  val corte: Float=mediana/columns.length.toFloat
+
+  //val dfFiltered=dfCalculated.filter(s"sumTotal>$inf and sumTotal<$sup")
 
   //val dictCols=columns.map(i=>(i, col(i).withField("max", lit(1)).withField("min", lit(0)))).toMap
   //val dfPrepared=dfCalculated.withColumns(dictCols)
@@ -108,10 +103,15 @@ object Processing extends App {
     .withField("res", col(c + ".weight") * col(c + ".value")))).toMap
   //println("dfCalculated show")
   //dfCalculated.filter("class=0").show()
+  val niter=(maxim-minim).toInt*5
+  println(s"maximo: $maxim")
+  println(s"minimo: $minim")
+  println(s"numero iteraciones: $niter" )
   val listF1=immutable.Seq.range(0,100).map(i=>f1()(_))
   val chained=chain(listF1)
+  //dfFiltered.select(columns.map(i=>col(s"$i.weight")):_*).show()
   val dfWeightsCalculated=dfCalculated.transform(chained).cache()
-
+  //dfWeightsCalculated.select(columns.map(i=>col(s"$i.weight")):_*).show()
   val listCols=columns.map(c=>struct(col(s"${c}.weight"), col(s"${c}.value")).alias(c) ):+col("class")
   //println("dfWeightsCalculated show")
   //dfWeightsCalculated.filter("class=0").show()
@@ -122,21 +122,21 @@ object Processing extends App {
   val prods=dfSumaFinal.select(listProds:_*)
   val row=prods.first()
   val mapsRow=row.getValuesMap[Double](row.schema.fieldNames)
-  val selectColumns=mapsRow.toSeq.sortWith(_._2 > _._2).toMap.take(100)
+  val selectColumns=mapsRow.toSeq.sortWith(_._2 > _._2).toMap.take(200)
 
-  val colM: Column =columns.map(i=>col(i+".weight")).reduce((x, y) => x+y)
+  //val colM: Column =columns.map(i=>col(i+".weight")).reduce((x, y) => x+y)
   //println("dfSumaFinal show")
   //dfSumaFinal.filter("class=0").show()
-  val dfProd=dfSumaFinal.withColumn("valueRow", colM)
+  //val dfProd=dfSumaFinal.withColumn("valueRow", colM)
 
-  val min_value = dfProd.select(min(col("valueRow")).alias("MIN")).first().getDouble(0)
-  val avg_value = dfProd.select(avg(col("valueRow")).alias("AVG")).first().getDouble(0)
+  //val min_value = dfProd.select(min(col("valueRow")).alias("MIN")).first().getDouble(0)
+ // val avg_value = dfProd.select(avg(col("valueRow")).alias("AVG")).first().getDouble(0)
   println("Select columns and instances")
   val columnsSelected=selectColumns.map(i=>s"`${i._1.replace("_sum", "")}`.value as `${i._1.replace("_sum", "")}`").toList:+"class"
 
-  val dfFinal=dfProd.filter(col("valueRow")>=lit(avg_value-min_value))
+  val dfFinal=dfSumaFinal//.filter(col("valueRow")>=lit(avg_value-min_value))
   .selectExpr(columnsSelected:_*)
   println("Write data")
-  dfFinal.write.mode(SaveMode.Overwrite).parquet("hdfs://atlas:9000/user/carsan/processingDataPersonalized.parquet")
+  dfFinal.write.mode(SaveMode.Overwrite).parquet(configs("output").toString)
 
 }

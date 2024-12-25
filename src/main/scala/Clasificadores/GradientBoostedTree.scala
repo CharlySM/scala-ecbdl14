@@ -1,7 +1,6 @@
 package Clasificadores
 
-import Clasificadores.Processing.balancedDF
-import Utils.Utils.prepareData
+import Utils.Utils.{evaluate, prepareData}
 import YamlConfig.LoadYaml.{getParams, parseYaml}
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.classification.GBTClassifier
@@ -46,20 +45,9 @@ object GradientBoostedTree extends App{
     .setFeatureSubsetStrategy("auto")
     .fit(featureDf)
 
-  val predictionDf: RDD[(Double, Double)] = model.transform(dfTestFeatures).rdd
-    .map(r=>(r.getAs[Double]("prediction"), r.getAs[Double]("label")))
+  val predictionDf= model.transform(dfTestFeatures)
 
-  val metrics = new MulticlassMetrics(predictionDf)
-  val matrix=metrics.confusionMatrix
-
-  val (fp, tp) = (matrix.apply(0, 1), matrix.apply(1,1))
-  val (fn, tn)=(matrix.apply(1, 0), matrix.apply(0,0))
-
-  val TPR = tp/(tp+fn)
-  val TNR = tn/(tn+fp)
-  val score = TPR * TNR
-
-  val scores = (TPR, TNR, score)
+  val scores=evaluate(predictionDf)
 
   print(scores)
 }
