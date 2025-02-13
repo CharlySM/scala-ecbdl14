@@ -77,7 +77,7 @@ object Processing extends App {
   val dfCalculated=calculate(dfWeights, columns)
     .withColumn("total", col("sumTotal")*col("class"))
 
-  val maxim=dfCalculated.select(functions.max(col("sumTotal")).alias("MAX")).first().getDouble(0).toFloat
+ /* val maxim=dfCalculated.select(functions.max(col("sumTotal")).alias("MAX")).first().getDouble(0).toFloat
   val minim=dfCalculated.select(min(col("sumTotal")).alias("MIN")).first().getDouble(0).toFloat
   val mediana=dfCalculated.select(median(col("sumTotal")).alias("median")).first().getDouble(0).toFloat
   val medmax=(maxim-mediana).abs
@@ -87,37 +87,46 @@ object Processing extends App {
 
   val sup=mediana+margen
   val inf=mediana-margen
-
+*/
+  val maxim1s=dfCalculated.filter("class=1").select(functions.max(col("sumTotal")).alias("MAX")).first().getDouble(0).toFloat
+  val maxim0s=dfCalculated.filter("class=0").select(functions.max(col("sumTotal")).alias("MAX")).first().getDouble(0).toFloat
+  val const1s=100000
+  val const0s=10000
+  val corte1s=const1s/columns.length.toFloat
+  val corte0s=const0s/columns.length.toFloat
   //val max=mediana
   //val corte=mediana/4
-  val corte: Float=mediana/columns.length.toFloat
-
+  //val corte: Float=mediana/columns.length.toFloat
+  val mapCorte=map(lit(0), lit(corte0s),
+    lit(1), lit(corte1s))
+  val mapMax=map(lit(1), lit(maxim1s),
+    lit(0), lit(maxim0s))
   //val dfFiltered=dfCalculated.filter(s"sumTotal>$inf and sumTotal<$sup")
 
   //val dictCols=columns.map(i=>(i, col(i).withField("max", lit(1)).withField("min", lit(0)))).toMap
   //val dfPrepared=dfCalculated.withColumns(dictCols)
   println("Evolutive  transformations")
-  val dictUpdateWeights=columns.map(c=> (c, col(c).withField("weight", col(c+".weight")+(lit(corte)-col(c+".res"))/lit(maxim))/*col(c).withField("max", when(col(c + ".res") > lit(corte), col(c + ".weight")).otherwise(
+  val dictUpdateWeights=columns.map(c=> (c, col(c).withField("weight", col(c+".weight")+(mapCorte(col("class"))- (col(c+".res")+mapCorte(col("class"))))/mapMax(col("class")))/*col(c).withField("max", when(col(c + ".res") > lit(corte), col(c + ".weight")).otherwise(
       col(c + ".max"))).withField("min", when(col(c + ".res") < lit(corte), col(c + ".weight"))
       .otherwise(col(c + ".min"))).withField("weight", getRandomNumber(col(c + ".min"), col(c + ".max")))*/
     .withField("res", col(c + ".weight") * col(c + ".value")))).toMap
   //println("dfCalculated show")
   //dfCalculated.filter("class=0").show()
-  val niter=(maxim-minim).toInt*5
-  println(s"maximo: $maxim")
+  //val niter=(maxim-minim).toInt*5
+ /* println(s"maximo: $maxim")
   println(s"minimo: $minim")
-  println(s"numero iteraciones: $niter" )
-  val listF1=immutable.Seq.range(0,100).map(i=>f1()(_))
+  println(s"numero iteraciones: $niter" )*/
+  val listF1=immutable.Seq.range(0,10).map(i=>f1()(_))
   val chained=chain(listF1)
   //dfFiltered.select(columns.map(i=>col(s"$i.weight")):_*).show()
   val dfWeightsCalculated=dfCalculated.transform(chained).cache()
   //dfWeightsCalculated.select(columns.map(i=>col(s"$i.weight")):_*).show()
-  val listCols=columns.map(c=>struct(col(s"${c}.weight"), col(s"${c}.value")).alias(c) ):+col("class")
+  val listCols=columns.map(c=>struct(col(s"$c.weight"), col(s"$c.value")).alias(c) ):+col("class")
   //println("dfWeightsCalculated show")
   //dfWeightsCalculated.filter("class=0").show()
   val dfSumaFinal = dfWeightsCalculated.select(listCols:_*).cache()
 
-  val listProds=columns.map(i=>sum(col(s"$i.weight")).alias(i+"_sum"))//:+col("class")
+  val listProds=columns.map(i=>sum(col(s"$i.weight")).alias(i+"_sum")) //:+col("class")
 
   val prods=dfSumaFinal.select(listProds:_*)
   val row=prods.first()

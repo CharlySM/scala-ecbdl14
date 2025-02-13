@@ -4,7 +4,7 @@ import Utils.Utils.{evaluate, prepareData}
 import YamlConfig.LoadYaml.{getParams, parseYaml}
 import ml.dmlc.xgboost4j.scala.spark.XGBoostClassifier
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.{PCA, VectorAssembler}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.functions.{col, lit}
@@ -15,7 +15,11 @@ object XGBoost extends App {
 
   implicit val spark: SparkSession = SparkSession
     .builder()
-    .appName(name = "Preprocessing")
+    .appName(name = "xgboost")
+    .config("spark.driver.extraJavaOptions", "-Xss1024m")
+    .config("spark.executor.extraJavaOptions", "-Xss1024m")
+    .config("spark.memory.offHeap.enabled", true)
+    .config("spark.memory.offHeap.size", "9g")
     .master(master = configs("cluster").toString)
     //.master("local[*]")
     .getOrCreate()
@@ -43,17 +47,27 @@ object XGBoost extends App {
     "prediction_col" -> "prediction",
     "scale_pos_weight" -> params("scale_pos_weight").asInstanceOf[Double],
     "num_workers" -> params("num_workers").asInstanceOf[Int],
-    "num_round" -> params.getOrElse("num_round", "30").asInstanceOf[Int])
+    "num_round" -> params("num_round").asInstanceOf[Int])
+
+
+  val pca = new PCA()
+    .setInputCol("features")
+    .setOutputCol("pcaFeatures")
+    .setK(params("k").asInstanceOf[Int])
+    .fit(featureDf)
+
+  val pcafeatures = pca.transform(featureDf).select("label","pcaFeatures").withColumnRenamed("pcaFeatures", "features")
+  val pcaTest = pca.transform(dfTestFeatures).select("label","pcaFeatures").withColumnRenamed("pcaFeatures", "features")
 
 
   val xgbClassifier = new XGBoostClassifier(xgbParam)
-  .setNumClass(2)//.setFeaturesCol("features").setLabelCol("label")
-  val xgbClassificationModel = xgbClassifier.fit(featureDf)
+  .setNumClass(2).setFeaturesCol("features").setLabelCol("label")
+  val xgbClassificationModel = xgbClassifier.fit(pcafeatures)
   //dfTestFeatures.filter("label=1").show()
   //dfTestFeatures.filter("label=0").show()
   //println(dfTestFeatures.filter("label=1").count())
   //println(dfTestFeatures.filter("label=0").count())
-  val results1 = xgbClassificationModel.transform(dfTestFeatures)
+  val results1 = xgbClassificationModel.transform(pcaTest)
   // val results= results1.select("prediction", "label").rdd.map(r=>(r(0), r(1)))
   //println(results1.filter("prediction=1").count())
  // println(results1.filter("prediction=0").count())

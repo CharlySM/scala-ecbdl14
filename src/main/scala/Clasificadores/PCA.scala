@@ -38,11 +38,14 @@ object PCA extends App {
     .setK(params("k").asInstanceOf[Int])
     .fit(featureDf)
 
-  val result = pca.transform(featureDf)//.select("pcaFeatures")
-  result.show(false)
+  val pcafeatures = pca.transform(featureDf).select("label","pcaFeatures").withColumnRenamed("pcaFeatures", "features")
+  val pcaTest = pca.transform(dfTestFeatures).select("label","pcaFeatures").withColumnRenamed("pcaFeatures", "features")
+
+  pcafeatures.show(false)
+  pcaTest.show(false)
 
   println("Write data")
-  result.write.mode(SaveMode.Overwrite).parquet(configs("output").toString)
+  //result.write.mode(SaveMode.Overwrite).parquet(configs("output").toString)
 
 
   /*val metrics = new MulticlassMetrics(result.rdd.map(r=>(r(0), r(1))))

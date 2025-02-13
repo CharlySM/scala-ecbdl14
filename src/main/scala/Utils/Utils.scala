@@ -1,9 +1,11 @@
 package Utils
 
-import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
+//import org.apache.spark.mllib.feature.ChiSqSelector
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{col, lit, when}
+import org.apache.spark.ml.feature.ChiSqSelector
 
 object Utils {
 
@@ -61,6 +63,15 @@ object Utils {
     union
   }
 
+
+  def random_oversampling(df:DataFrame, ratio:Double=1.0) :DataFrame={
+    val df_minority = df.filter(df("label") === 1.0)
+    val df_majority = df.filter(df("label") ===0.0)
+    var ratio_real = df_majority.count().toDouble / df_minority.count().toDouble
+    ratio_real = ratio_real * ratio
+    val df_minority_over = df_minority.sample(withReplacement = true, ratio_real, seed = 12345678)
+    df_majority.union(df_minority_over)
+  }
   /**
    * This function balance a dataframe desbalanced, it is balanced by undersampling.
    * First is calculated the number of positive class and negative class, then
@@ -101,40 +112,40 @@ object Utils {
        dfAux.withColumns(lisCols)
      }
      else {
-       val df=spark.sqlContext.read.parquet(configs("dataset").toString)
-       random_undersampling(df, 1.0, "class")
+       println(configs("dataset").toString)
+       spark.sqlContext.read.parquet(configs("dataset").toString)
+       //random_undersampling(df, 1.0, "class")
      }
 
      //dfStart.printSchema()
 
      val featureDf=if(dfStart.columns.contains("label") && dfStart.columns.contains("features")) dfStart
      else {
-
        val cols = dfStart.columns.filter(_ != "class")
+         val dfFeatures = dfStart
+           .withColumn("label", col("class").cast("Double"))
+         println("Prepare data")
+         val assembler = new VectorAssembler()
+           .setInputCols(cols)
+           .setOutputCol("features")
 
-       val dfFeatures = dfStart
-         .withColumn("label", col("class").cast("Double"))
-       println("Prepare data")
-       val assembler = new VectorAssembler()
-         .setInputCols(cols)
-         .setOutputCol("features")
-
-       assembler.transform(dfFeatures).select("features", "label")
+         assembler.transform(dfFeatures).select("features", "label")
      }
      println(configs("test").toString)
      val test= spark.sqlContext.read.parquet(configs("test").toString)
 
      val featuresTestDf=if(test.columns.contains("label") && test.columns.contains("features")) test
      else{
-     val cols = dfStart.columns.filter(_ != "class")
-     val dfTest=test
-       .withColumn("label",col("class").cast("Double"))
-     val assemblerTest=new VectorAssembler()
-       .setInputCols(cols)
-       .setOutputCol("features")
+       val cols = dfStart.columns.filter(_ != "class")
+         val dfTest = test
+           .withColumn("label", col("class").cast("Double"))
+         val assemblerTest = new VectorAssembler()
+           .setInputCols(cols)
+           .setOutputCol("features")
 
-      assemblerTest.transform(dfTest).select("features", "label")
+         assemblerTest.transform(dfTest).select("features", "label")
      }
+
      (featureDf, featuresTestDf)
    }
 
